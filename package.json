@@ -1,0 +1,21 @@
+{
+  "name": "gsmsv",
+  "version": "0.1.0",
+  "description": "GSM SV 플랫폼 CLI — VM과 서버리스 함수를 터미널에서 관리합니다.",
+  "type": "module",
+  "bin": {
+    "gsmsv": "src/index.js",
+    "gsm": "src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "license": "MIT"
+}
