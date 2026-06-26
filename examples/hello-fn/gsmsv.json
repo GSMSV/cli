@@ -1,0 +1,8 @@
+{
+  "name": "hello-fn",
+  "entry": "index.js",
+  "runtime": "javascript",
+  "timeout": 10000,
+  "memoryLimit": 128,
+  "description": "이름을 받아 인사하는 예제 함수"
+}
