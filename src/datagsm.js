@@ -1,27 +1,29 @@
 import { ApiError } from "./api.js";
 import { getApiUrl } from "./config.js";
 
-const GSMSV_PREFIX = "/api/v1";
+const PREFIX = "/api/v1";
 const DATA_GSM_AUTH_BASE = "https://oauth.datagsm.kr";
+const REDIRECT_STATUS = [301, 302, 303, 307, 308];
 
-function stripSlash(url) {
-  return url.replace(/\/+$/, "");
+function base(apiUrl) {
+  return getApiUrl(apiUrl) + PREFIX;
 }
 
-function gsmsvBase(apiUrl) {
-  return stripSlash(apiUrl || getApiUrl()) + GSMSV_PREFIX;
-}
-
-function header(res, name) {
-  return res.headers.get(name);
-}
-
-function locationOf(res, step) {
-  const location = header(res, "location");
+function expectRedirect(res, step) {
+  if (!REDIRECT_STATUS.includes(res.status)) {
+    throw new ApiError(res.status, `${step} 리다이렉트에 실패했습니다 (HTTP ${res.status}).`);
+  }
+  const location = res.headers.get("location");
   if (!location) {
-    throw new ApiError(res.status, `${step} redirect location is missing.`);
+    throw new ApiError(res.status, `${step} 리다이렉트 위치(location)가 없습니다.`);
   }
   return location;
+}
+
+function expectOk(res, step) {
+  if (!res.ok) {
+    throw new ApiError(res.status, `${step} 요청에 실패했습니다 (HTTP ${res.status}).`);
+  }
 }
 
 async function parseJson(res, step) {
@@ -30,35 +32,22 @@ async function parseJson(res, step) {
   try {
     return JSON.parse(text);
   } catch {
-    throw new ApiError(res.status, `${step} returned invalid JSON.`);
+    throw new ApiError(res.status, `${step} 응답이 올바른 JSON 이 아닙니다.`);
   }
 }
 
-async function expectRedirect(res, step) {
-  if (![301, 302, 303, 307, 308].includes(res.status)) {
-    throw new ApiError(res.status, `${step} redirect failed (HTTP ${res.status}).`);
-  }
-  return locationOf(res, step);
-}
-
-async function expectOk(res, step) {
-  if (!res.ok) {
-    throw new ApiError(res.status, `${step} failed (HTTP ${res.status}).`);
-  }
-}
-
-function getSetCookieHeaders(headers) {
+function setCookies(headers) {
   if (typeof headers.getSetCookie === "function") return headers.getSetCookie();
   const setCookie = headers.get("set-cookie");
   return setCookie ? [setCookie] : [];
 }
 
-function splitCombinedSetCookie(value) {
+function splitCookies(value) {
   return value.split(/,(?=\s*[^;,=\s]+=[^;,]+)/g).map((v) => v.trim()).filter(Boolean);
 }
 
-function readCookie(setCookieHeaders, name) {
-  for (const headerValue of setCookieHeaders.flatMap(splitCombinedSetCookie)) {
+function readCookie(cookieHeaders, name) {
+  for (const headerValue of cookieHeaders.flatMap(splitCookies)) {
     const [cookie] = headerValue.split(";");
     const index = cookie.indexOf("=");
     if (index === -1) continue;
@@ -69,33 +58,28 @@ function readCookie(setCookieHeaders, name) {
   return null;
 }
 
-function tokenFromAuthorizeUrl(url) {
-  const token = new URL(url).searchParams.get("token");
-  if (!token) throw new ApiError(0, "DataGSM authorize token is missing.");
-  return token;
-}
-
-function exchangeCodeFromCallbackUrl(url) {
-  const code = new URL(url).searchParams.get("code");
-  if (!code) throw new ApiError(0, "GSMSV exchange code is missing.");
-  return code;
+function queryParam(url, name, message) {
+  const value = new URL(url).searchParams.get(name);
+  if (!value) throw new ApiError(0, message);
+  return value;
 }
 
 export async function login(email, password, opts = {}) {
-  const base = gsmsvBase(opts.apiUrl);
+  const gsmsvBase = base(opts.apiUrl);
+  const origin = getApiUrl(opts.apiUrl);
 
-  const entrance = await fetch(base + "/oauth/authorize", {
+  const entrance = await fetch(gsmsvBase + "/oauth/authorize", {
     method: "GET",
     redirect: "manual",
   });
-  const dataGsmAuthorizeUrl = await expectRedirect(entrance, "GSMSV OAuth entrance");
+  const dataGsmAuthorizeUrl = expectRedirect(entrance, "GSMSV OAuth 진입");
 
   const authorizeInit = await fetch(dataGsmAuthorizeUrl, {
     method: "GET",
     redirect: "manual",
   });
-  const accountInputUrl = await expectRedirect(authorizeInit, "DataGSM authorize init");
-  const dataGsmToken = tokenFromAuthorizeUrl(accountInputUrl);
+  const accountInputUrl = expectRedirect(authorizeInit, "DataGSM authorize 초기화");
+  const dataGsmToken = queryParam(accountInputUrl, "token", "DataGSM authorize 토큰이 없습니다.");
 
   const accountInput = await fetch(DATA_GSM_AUTH_BASE + "/api/oauth/authorize", {
     method: "POST",
@@ -105,35 +89,35 @@ export async function login(email, password, opts = {}) {
     },
     body: JSON.stringify({ email, password, token: dataGsmToken }),
   });
-  await expectOk(accountInput, "DataGSM account input");
-  const accountData = await parseJson(accountInput, "DataGSM account input");
+  expectOk(accountInput, "DataGSM 계정 입력");
+  const accountData = await parseJson(accountInput, "DataGSM 계정 입력");
   if (!accountData?.redirect_url) {
-    throw new ApiError(accountInput.status, "DataGSM redirect_url is missing.");
+    throw new ApiError(accountInput.status, "DataGSM redirect_url 이 없습니다.");
   }
 
   const callback = await fetch(accountData.redirect_url, {
     method: "GET",
     redirect: "manual",
   });
-  const authCallbackUrl = await expectRedirect(callback, "GSMSV callback");
-  const exchangeCode = exchangeCodeFromCallbackUrl(authCallbackUrl);
+  const authCallbackUrl = expectRedirect(callback, "GSMSV 콜백");
+  const exchangeCode = queryParam(authCallbackUrl, "code", "GSMSV exchange 코드가 없습니다.");
 
-  const exchange = await fetch(base + "/oauth/exchange", {
+  const exchange = await fetch(gsmsvBase + "/oauth/exchange", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Origin: stripSlash(opts.apiUrl || getApiUrl()),
+      Origin: origin,
       Referer: authCallbackUrl,
     },
     body: JSON.stringify({ code: exchangeCode }),
   });
-  await expectOk(exchange, "GSMSV OAuth exchange");
+  expectOk(exchange, "GSMSV OAuth exchange");
 
-  const setCookieHeaders = getSetCookieHeaders(exchange.headers);
-  const accessToken = readCookie(setCookieHeaders, "access_token");
-  const refreshToken = readCookie(setCookieHeaders, "refresh_token");
+  const cookies = setCookies(exchange.headers);
+  const accessToken = readCookie(cookies, "access_token");
+  const refreshToken = readCookie(cookies, "refresh_token");
   if (!accessToken || !refreshToken) {
-    throw new ApiError(exchange.status, "GSMSV OAuth exchange tokens are missing.");
+    throw new ApiError(exchange.status, "GSMSV OAuth exchange 토큰이 없습니다.");
   }
 
   return {
