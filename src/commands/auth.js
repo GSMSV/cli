@@ -5,18 +5,38 @@ import { c, log, success, info, error, prompt, promptPassword } from "../ui.js";
 
 const ROLES = ["user", "project_owner", "admin"];
 
+function parseBool(value, fallback = false) {
+  if (value === undefined) return fallback;
+  if (value === true || value === "true") return true;
+  if (value === false || value === "false") return false;
+  throw new ApiError(1, "--datagsm must be true or false.");
+}
+
 export async function login(args, flags) {
   log(c.bold("GSM SV 로그인") + c.gray(`  (${getApiUrl(flags.api)})`));
-  const email = flags.email || (await prompt("이메일:"));
-  const password = flags.password || (await promptPassword("비밀번호:"));
-  let role = flags.role || "user";
-  if (!ROLES.includes(role)) {
-    error(`알 수 없는 역할: ${role} (가능: ${ROLES.join(", ")})`);
+  let datagsm;
+  try {
+    datagsm = parseBool(flags.datagsm, false);
+  } catch (e) {
+    error(e.detail);
     process.exitCode = 1;
     return;
   }
+  const email = flags.email || (await prompt("이메일:"));
+  const password = flags.password || (await promptPassword("비밀번호:"));
 
   try {
+    if (datagsm) {
+      return;
+    }
+
+    let role = flags.role || "user";
+    if (!ROLES.includes(role)) {
+      error(`알 수 없는 역할: ${role} (가능: ${ROLES.join(", ")})`);
+      process.exitCode = 1;
+      return;
+    }
+
     const tokens = await apiLogin(email, password, role);
     saveAuth({
       accessToken: tokens.access_token,
