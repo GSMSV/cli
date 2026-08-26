@@ -1,22 +1,50 @@
 // login / logout / whoami
 import { login as apiLogin, request, ApiError } from "../api.js";
+import { login as dataGsmLogin } from "../datagsm.js";
 import { saveAuth, clearAuth, getAuth, getApiUrl } from "../config.js";
 import { c, log, success, info, error, prompt, promptPassword } from "../ui.js";
 
 const ROLES = ["user", "project_owner", "admin"];
 
+function parseBool(value, fallback = false) {
+  if (value === undefined) return fallback;
+  return value === true;
+}
+
 export async function login(args, flags) {
-  log(c.bold("GSM SV 로그인") + c.gray(`  (${getApiUrl(flags.api)})`));
-  const email = flags.email || (await prompt("이메일:"));
-  const password = flags.password || (await promptPassword("비밀번호:"));
-  let role = flags.role || "user";
-  if (!ROLES.includes(role)) {
-    error(`알 수 없는 역할: ${role} (가능: ${ROLES.join(", ")})`);
+  let datagsm;
+  try {
+    datagsm = parseBool(flags.datagsm, false);
+  } catch (e) {
+    error(e.detail);
     process.exitCode = 1;
     return;
   }
+  const title = datagsm ? "GSM SV (DataGSM) 로그인" : "GSM SV 로그인";
+  log(c.bold(title) + c.gray(`  (${getApiUrl(flags.api)})`));
+  const email = flags.email || (await prompt("이메일:"));
+  const password = flags.password || (await promptPassword("비밀번호:"));
 
   try {
+    if (datagsm) {
+      const tokens = await dataGsmLogin(email, password, { apiUrl: getApiUrl(flags.api) });
+      saveAuth({
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        email,
+      });
+      const me = await request("/auth/me").catch(() => null);
+      success(`로그인 완료 ${c.cyan(me?.name || email)} ${c.gray(`(${me?.role || "datagsm"})`)}`);
+      return;
+    }
+
+    let role = flags.role || "user";
+    if (!ROLES.includes(role)) {
+      error(`알 수 없는 역할: ${role} (가능: ${ROLES.join(", ")})`);
+      process.exitCode = 1;
+      return;
+    }
+
     const tokens = await apiLogin(email, password, role);
     saveAuth({
       accessToken: tokens.access_token,

@@ -22,6 +22,7 @@ const OPTIONS = {
   email: { type: "string" },
   password: { type: "string" },
   role: { type: "string" },
+  datagsm: { type: "boolean" },
   // vm create
   tier: { type: "string" },
   os: { type: "string" },
@@ -46,7 +47,7 @@ ${c.bold("사용법")}
   gsmsv <명령> [옵션]
 
 ${c.bold("인증")}
-  login                  로그인 (--email --password --role user|project_owner|admin)
+  login                  로그인 (--email --password --role user|project_owner|admin --datagsm)
   logout                 로그아웃 (로컬 자격증명 삭제)
   whoami                 현재 로그인 정보
 

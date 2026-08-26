@@ -20,6 +20,7 @@ node src/index.js <명령>
 ```bash
 gsmsv login                         # 이메일/비밀번호 입력
 gsmsv login --email me@gsm.hs.kr --role project_owner
+gsmsv login --email me@gsm.hs.kr --datagsm
 gsmsv whoami
 ```
 
