@@ -156,6 +156,9 @@ export async function exec(args, flags) {
     } catch {
       return error("--data 는 유효한 JSON 이어야 합니다.");
     }
+  } else if (args.length > 1) {
+    const input = args.slice(1).join(" ");
+    payload = { input, body: input, expression: input, code: input };
   }
   const stop = startSpinner(`'${f.name}' 실행 중`);
   try {

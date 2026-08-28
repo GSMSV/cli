@@ -65,7 +65,7 @@ ${c.bold("서버리스 함수")}
   fn ls                  함수 목록
   fn deploy <file>       함수 배포/갱신 (이름 기준 idempotent, gsmsv.json 지원)
   fn inspect <id|이름>
-  fn exec <id|이름>      함수 실행 (--data '<json>')
+  fn exec <id|이름> [입력] 함수 실행 (--data '<json>' 또는 인라인 입력)
   fn logs <id|이름>      실행 로그 (--limit N)
   fn rm <id|이름>
 
